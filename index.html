@@ -27,7 +27,7 @@
                 <li><a href="#slovnicek">Pojmy</a></li>
                 <li><a href="#knihovny">Knihovny</a></li>
                 <li><a href="#algoritmy">Algoritmy</a></li>
-                <li><a href="#implementace">Implementace</a></li>
+                <li><a href="#implementace">Konfigurace</a></li>
                 <li><a href="#ukazky">Ukázky</a></li>
                 <li><a href="#vysledky">Výsledky</a></li>
             </ul>
@@ -277,7 +277,7 @@
         </section>
 
         <section id="implementace" class="animate-in">
-            <h2 class="section-title">Implementace a konfigurace</h2>
+            <h2 class="section-title">Konfigurace</h2>
 
             <div class="card">
                 <h3>Instalace OpenSSL 3.5</h3>
@@ -307,7 +307,7 @@ source ~/.bashrc # zde je někdy zapotřebí pročistit proměnnou PATH pokud po
             </div>
 
             <div class="card">
-                <h3>Instalace a konfigurace OQS</h3>
+                <h3>Instalace knihovny OQS (liboqs)</h3>
                 <p>Pro experimenty s širší škálou PQC algoritmů lze použít knihovnu liboqs a její Python wrapper:</p>
 
                 <div class="code-block">
@@ -417,212 +417,87 @@ openssl dgst -verify ml_dsa_87_key_public.pem -signature signature.bin test.txt
 
                     <div class="code-editor">
                         <div class="code-tabs">
-                            <button class="code-tab active">demo_liboqs.py</button>
+                            <button class="code-tab active">test_liboqs.py</button>
                         </div>
                         <div class="code-content">
-<pre><code class="language-python">
-    #!/usr/bin/env python3
-    import oqs
-    import os
-    import sys
-    import time
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.backends import default_backend
+<pre><code class="language-python">import oqs
 
-    def print_header(title):
-    print("\n" + "=" * 70)
-    print(f"{title}")
-    print("=" * 70)
+def test_sig_algorithms():
+    sig_algorithms = ["Dilithium5", "Falcon-512"]
+    print("\n" + "="*50 + "\n")
+    print("Testování podpisových algoritmů:")
+    
+    results = {}
+    
+    for sig_name in sig_algorithms:
+        try:
+            print(f"\nTestování podpisového algoritmu: {sig_name}")
+            start_time = time.time()
+            signer = oqs.Signature(sig_name)
 
-    def generate_keypair(algorithm):
-    print(f"[+] Generating {algorithm} keypair...")
-    if algorithm in oqs.get_supported_kem_mechanisms():
-        kem = oqs.KeyEncapsulation(algorithm)
-        public_key = kem.generate_keypair()
-        secret_key = kem.export_secret_key()
-        print(f"[+] Success! Keypair generated.")
-        return kem, public_key, secret_key
-    else:
-        print(f"[-] Error: Algorithm {algorithm} not supported.")
-        sys.exit(1)
-
-    def demo_kem(algorithm="ML-KEM-768"):
-    print_header(f"DEMONSTRACE VÝMĚNY KLÍČŮ POMOCÍ {algorithm}")
-
-    # Alice generuje pár klíčů
-    print("\n[Alice] Generuji pár klíčů...")
-    alice_kem, alice_public_key, alice_secret_key = generate_keypair(algorithm)
-    print(f"[Alice] Velikost veřejného klíče: {len(alice_public_key)} bytů")
-
-    # Bob použije Alicin veřejný klíč k zapouzdření tajemství
-    print("\n[Bob] Encapsulating shared secret using Alice's public key...")
-    bob_kem = oqs.KeyEncapsulation(algorithm)
-    ciphertext, shared_secret_bob = bob_kem.encap_secret(alice_public_key)
-    print(f"[Bob] Velikost šifrového textu: {len(ciphertext)} bytů")
-    print(f"[Bob] Velikost sdíleného tajemství: {len(shared_secret_bob)} bytů")
-
-    # Alice rozbalí tajemství pomocí svého tajného klíče
-    print("\n[Alice] Decapsulating shared secret using received ciphertext...")
-    shared_secret_alice = alice_kem.decap_secret(ciphertext)
-
-    # Ověření, že sdílená tajemství jsou identická
-    if shared_secret_alice == shared_secret_bob:
-        print("\n[✓] Úspěch! Sdílená tajemství jsou identická.")
-        print(f"[✓] Shared secret: {shared_secret_alice.hex()[:32]}...")
-    else:
-        print("\n[✗] Chyba! Sdílená tajemství nejsou identická.")
-
-    # Použití sdíleného tajemství pro šifrování zprávy pomocí AES
-    message = b"Toto je tajná zpráva zabezpečená postkvantovou kryptografií!"
-    print(f"\n[+] Šifrujeme zprávu: {message.decode()}")
-
-    # Příprava pro AES-GCM
-    nonce = os.urandom(12)
-    backend = default_backend()
-    cipher = Cipher(algorithms.AES(shared_secret_alice[:32]), 
-                    modes.GCM(nonce), 
-                    backend=backend)
-    encryptor = cipher.encryptor()
-    ciphertext_message = encryptor.update(message) + encryptor.finalize()
-    tag = encryptor.tag
-
-    print(f"[+] Zašifrovaná zpráva: {ciphertext_message.hex()[:32]}...")
-
-    # Dešifrování zprávy
-    cipher = Cipher(algorithms.AES(shared_secret_bob[:32]), 
-                    modes.GCM(nonce, tag), 
-                    backend=backend)
-    decryptor = cipher.decryptor()
-    decrypted_message = decryptor.update(ciphertext_message) + decryptor.finalize()
-
-    print(f"[+] Dešifrovaná zpráva: {decrypted_message.decode()}")
-
-    # Uvolnění zdrojů
-    alice_kem.free()
-    bob_kem.free()
-
-    return True
-
-    if __name__ == "__main__":
-    print_header("LIBOQS PYTHON WRAPPER DEMONSTRATION")
-
-    print("\nDostupné KEM algoritmy:")
-    for i, alg in enumerate(oqs.get_enabled_KEM_mechanisms()):
-        print(f"  {i+1}. {alg}")
-
-    print("\nStandardizované algoritmy NIST:")
-    for alg in ["ML-KEM-512", "ML-KEM-768", "ML-KEM-1024"]:
-        if alg in oqs.get_enabled_KEM_mechanisms():
-            print(f"  ✓ {alg}")
-        else:
-            print(f"  ✗ {alg} (není k dispozici)")
-
-    # Demonstrace KEM s ML-KEM-768 (dříve známým jako Kyber768)
-    demo_kem("ML-KEM-768")
+            public_key = signer.generate_keypair()
+            secret_key = signer.export_secret_key()
+            message = b"Test zpravy pro digitalni podpis"
+            signature = signer.sign(message)
+            
+            is_valid = signer.verify(message, signature, public_key)
+            
+            # Kontrola výsledku
+            if is_valid:
+                print("Úspěch! Podpis byl úspěšně ověřen.")
+            else:
+                print("Chyba: Ověření podpisu selhalo.")
+            
+            # Test úmyslně neplatného podpisu
+            tampered_message = b"Upravena zprava pro test neplatneho podpisu"
+            is_valid_tampered = signer.verify(tampered_message, signature, public_key)
+            
+            if not is_valid_tampered:
+                print("Úspěch! Neplatný podpis byl správně odmítnut.")
+            else:
+                print("Chyba: Neplatný podpis byl nesprávně přijat!")
+            
+            # Výpis velikostí klíčů a podpisu
+            print(f"Velikost veřejného klíče: {len(public_key)} bajtů")
+            print(f"Velikost tajného klíče: {len(secret_key)} bajtů")
+            print(f"Velikost podpisu: {len(signature)} bajtů")
+            
+            # Výpis času
+            elapsed_time = time.time() - start_time
+            print(f"Čas provedení: {elapsed_time:.7f} sekund")
+            
+            results[sig_name] = {
+                "success": True,
+                "pk_size": len(public_key),
+                "sk_size": len(secret_key),
+                "signature_size": len(signature),
+                "time": elapsed_time
+            }
+            
+            # Uvolnění zdrojů
+            signer.free()
 </code></pre>
                         </div>
                     </div>
+                
 
                     <h3>Výstup ukázky LibOQS</h3>
-<pre><code>
-    Dostupné algoritmy pro výměnu klíčů:
-    - BIKE-L1
-    - BIKE-L3
-    - BIKE-L5
-    - Classic-McEliece-348864
-    - Classic-McEliece-348864f
-    - Classic-McEliece-460896
-    - Classic-McEliece-460896f
-    - Classic-McEliece-6688128
-    - Classic-McEliece-6688128f
-    - Classic-McEliece-6960119
-    - Classic-McEliece-6960119f
-    - Classic-McEliece-8192128
-    - Classic-McEliece-8192128f
-    - HQC-128
-    - HQC-192
-    - HQC-256
-    - Kyber512
-    - Kyber768
-    - Kyber1024
-    - ML-KEM-512
-    - ML-KEM-768
-    - ML-KEM-1024
-    - sntrup761
-    - FrodoKEM-640-AES
-    - FrodoKEM-640-SHAKE
-    - FrodoKEM-976-AES
-    - FrodoKEM-976-SHAKE
-    - FrodoKEM-1344-AES
-    - FrodoKEM-1344-SHAKE
-    
-    Dostupné algoritmy pro digitální podpis:
-    - Dilithium2
-    - Dilithium3
-    - Dilithium5
-    - ML-DSA-44
-    - ML-DSA-65
-    - ML-DSA-87
-    - Falcon-512
-    - Falcon-1024
-    - Falcon-padded-512
-    - Falcon-padded-1024
-    - SPHINCS+-SHA2-128f-simple
-    - SPHINCS+-SHA2-128s-simple
-    - SPHINCS+-SHA2-192f-simple
-    - SPHINCS+-SHA2-192s-simple
-    - SPHINCS+-SHA2-256f-simple
-    - SPHINCS+-SHA2-256s-simple
-    - SPHINCS+-SHAKE-128f-simple
-    - SPHINCS+-SHAKE-128s-simple
-    - SPHINCS+-SHAKE-192f-simple
-    - SPHINCS+-SHAKE-192s-simple
-    - SPHINCS+-SHAKE-256f-simple
-    - SPHINCS+-SHAKE-256s-simple
-    - MAYO-1
-    - MAYO-2
-    - MAYO-3
-    - MAYO-5
-    - cross-rsdp-128-balanced
-    - cross-rsdp-128-fast
-    - cross-rsdp-128-small
-    - cross-rsdp-192-balanced
-    - cross-rsdp-192-fast
-    - cross-rsdp-192-small
-    - cross-rsdp-256-balanced
-    - cross-rsdp-256-fast
-    - cross-rsdp-256-small
-    - cross-rsdpg-128-balanced
-    - cross-rsdpg-128-fast
-    - cross-rsdpg-128-small
-    - cross-rsdpg-192-balanced
-    - cross-rsdpg-192-fast
-    - cross-rsdpg-192-small
-    - cross-rsdpg-256-balanced
-    - cross-rsdpg-256-fast
-    - cross-rsdpg-256-small
-    
-    ======================================================================
-    DEMONSTRACE VÝMĚNY KLÍČŮ POMOCÍ ML-KEM-768
-    ======================================================================
-    
-    [Alice] Generuji pár klíčů...
-    [+] Generating ML-KEM-768 keypair...
-    [+] Success! Keypair generated.
-    [Alice] Velikost veřejného klíče: 1184 bytů
-    
-    [Bob] Encapsulating shared secret using Alice's public key...
-    [Bob] Velikost šifrového textu: 1088 bytů
-    [Bob] Velikost sdíleného tajemství: 32 bytů
-    
-    [Alice] Decapsulating shared secret using received ciphertext...
-    
-    [✓] Úspěch! Sdílená tajemství jsou identická.
-    [✓] Shared secret: 79e3b8c7d5a2f416e0983bc21d7f5...
-    
-    [+] Šifrujeme zprávu: Toto je tajná zpráva zabezpečená postkvantovou kryptografií!
-    [+] Zašifrovaná zpráva: d48e9f7c5b3e61a20f38d4c7b915...
-    [+] Dešifrovaná zpráva: Toto je tajná zpráva zabezpečená postkvantovou kryptografií!</code></pre>
+<pre><code>Testování podpisového algoritmu: Dilithium5
+Úspěch! Podpis byl úspěšně ověřen.
+Úspěch! Neplatný podpis byl správně odmítnut.
+Velikost veřejného klíče: 2592 bajtů
+Velikost tajného klíče: 4864 bajtů
+Velikost podpisu: 4595 bajtů
+Čas provedení: 0.0019417 sekund
+
+Testování podpisového algoritmu: Falcon-512
+Úspěch! Podpis byl úspěšně ověřen.
+Úspěch! Neplatný podpis byl správně odmítnut.
+Velikost veřejného klíče: 897 bajtů
+Velikost tajného klíče: 1281 bajtů
+Velikost podpisu: 655 bajtů
+Čas provedení: 0.0098524 sekund
+</code></pre>
                 </div>
             </div>
         </section>
